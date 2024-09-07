@@ -1,0 +1,9 @@
+{
+    "click_duration_mean": 0.07,
+    "click_duration_std": 0.01,
+    "click_interval_mean": 0.09,
+    "click_interval_std": 0.044,
+    "click_count_min": 1,
+    "click_count_max": 4,
+    "pixel_pre_second":840
+}
