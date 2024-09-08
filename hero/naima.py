@@ -203,21 +203,23 @@ class Naima:
         angle = calculate_point_to_box_angle(hero_pos, close_monster)
         if not are_angles_on_same_side_of_y(self.last_angle, angle):
             self.ctrl.move(angle)
+            print(f'angle:{angle}')
             self.ctrl.attack(False)
         elif abs(hero_pos[1]-close_monster_point[1]) < 0.1 and abs(hero_pos[0]-close_monster_point[0]) < 0.15:
-            if np.random.rand() < 0.7:
-                self.skill("光芒烬盾")
-                time.sleep(1+np.random.normal(-0.2, 0.2))
-            if np.random.rand() < 0.8:
-                self.skill("洁净之光")
-                time.sleep(1+np.random.normal(-0.2, 0.2))
             if np.random.rand() < 0.5:
+                self.skill("光芒烬盾")
+                self.ctrl.attack(True)
+            elif np.random.rand() < 0.5:
+                self.skill("洁净之光")
+                self.ctrl.attack(True)
+            elif np.random.rand() < 0.5:
                 self.skill("胜利之矛")
-            if np.random.rand() < 0.6:
+                self.ctrl.attack(True)
+            elif np.random.rand() < 0.5:
                 self.skill("沐天之光")
-                time.sleep(1+np.random.normal(-0.2, 0.2))
-
-            self.ctrl.attack(True)
+                self.ctrl.attack(True)
+            else:
+                self.ctrl.attack(True)
         else:
             self.ctrl.move(angle)
             self.ctrl.attack(False)

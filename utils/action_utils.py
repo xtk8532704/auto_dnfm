@@ -3,6 +3,10 @@ import math
 import numpy as np
 
 
+def calculate_box_center(box):  # 计算矩形框的中心点坐标
+    return ((box[0] + box[2]) / 2, (box[1] + box[3]) / 2)
+
+
 def calculate_center(box):  # 计算矩形框的底边中心点坐标
     return ((box[0] + box[2]) / 2, box[3])
 

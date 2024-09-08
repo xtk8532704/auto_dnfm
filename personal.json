@@ -5,5 +5,6 @@
     "click_interval_std": 0.044,
     "click_count_min": 1,
     "click_count_max": 4,
-    "pixel_pre_second":840
+    "pixel_pre_second_x":840,
+    "pixel_pre_second_y":620
 }

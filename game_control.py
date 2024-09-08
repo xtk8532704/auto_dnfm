@@ -11,8 +11,6 @@ class GameControl:
     def __init__(self, adb: ScrcpyADB, skill_config, personal_config):
         with open(skill_config, 'r') as file:
             self.config = json.load(file)
-        with open(personal_config, 'r') as file:
-            self.personal_config = json.load(file)
 
         self.adb = adb
         self.move_touch = "none"
@@ -21,15 +19,28 @@ class GameControl:
         self.last_move = [self.config['joystick']['center']
                           [0], self.config['joystick']['center'][1]]
 
+        # 随机数相关
+        self.pixel_pre_second = 840
+
+        def _bounded_normal(mean, std_dev, lower, upper):
+            value = np.random.normal(mean, std_dev)
+            return max(min(value, upper), lower)
+        self._random_click_duration = lambda: _bounded_normal(
+            mean=0.04, std_dev=0.01, lower=0.03, upper=0.6)
+
+        self._random_click_interval = lambda: _bounded_normal(
+            mean=0.06, std_dev=0.02, lower=0.4, upper=0.8)
+
     def calc_mov_point(self, angle: int) -> Tuple[int, int]:
         rx, ry = (int(self.config['joystick']['center'][0]), int(
             self.config['joystick']['center'][1]))
+        angle += np.random.randint(-5, 5)
         if angle == 0:
             return rx, ry
         angle = angle % 360
         if angle < 0:
             angle = 360 + angle
-        r = int(self.config['joystick']['radius'])
+        r = int(self.config['joystick']['radius']) + random.randint(-20, 20)
         x = rx + r * math.cos(angle * math.pi / 180)
         y = ry - r * math.sin(angle * math.pi / 180)
         return int(x), int(y)
@@ -37,7 +48,7 @@ class GameControl:
     def move(self, angle: int):
         # 计算轮盘x, y坐标
         x, y = self.calc_mov_point(angle)
-        if angle == 0:
+        if angle == 0:  # 取消之前的移动指令
             if self.move_touch == "none":
                 return
             self.move_touch = "none"
@@ -54,7 +65,7 @@ class GameControl:
                 self.last_move = [x, y]
 
     def attack(self, flag: bool = True):
-        if flag == False:
+        if flag == False:  # 取消之前的持续攻击
             if self.attack_touch == "none":
                 return
             else:
@@ -63,6 +74,7 @@ class GameControl:
                         int(self.config['attack'][1]))
                 x, y = self._ramdon_xy(x, y)
                 self.adb.touch_move(x, y, 2)
+                time.sleep(self._random_click_duration()-0.02)
                 self.adb.touch_up(x, y, 2)
                 return
         x, y = (int(self.config['attack'][0]), int(self.config['attack'][1]))
@@ -74,7 +86,7 @@ class GameControl:
         else:
             self.adb.touch_move(x, y, 2)
 
-    def skill(self, name: str, t: float = 0.01):
+    def skill(self, name: str, t: float = 0.05):
         if isinstance(self.config[name], str):
             self.Roulette(name)
             return
@@ -84,7 +96,7 @@ class GameControl:
         x, y = (int(self.config[name][0]), int(self.config[name][1]))
         x, y = self._ramdon_xy(x, y)
         self.adb.touch_down(x, y, 3)
-        time.sleep(t)
+        time.sleep(self._random_click_duration())
         self.adb.touch_up(x, y, 3)
 
     def Roulette(self, name: str):  # 轮盘技能
@@ -105,7 +117,7 @@ class GameControl:
         x, y = (int(self.config['Jump'][0]), int(self.config['Jump'][1]))
         x, y = self._ramdon_xy(x, y)
         self.adb.touch_down(x, y, 3)
-        time.sleep(0.05)
+        time.sleep(self._random_click_duration())
         self.adb.touch_up(x, y, 3)
 
     def back_jump(self):
@@ -116,7 +128,7 @@ class GameControl:
                 int(self.config['Jump_Back'][1]))
         x, y = self._ramdon_xy(x, y)
         self.adb.touch_down(x, y, 3)
-        time.sleep(0.05)
+        time.sleep(self._random_click_duration())
         self.adb.touch_up(x, y, 3)
 
     def flash(self, angle: float):
@@ -127,20 +139,21 @@ class GameControl:
         x, y = (int(self.config['Jump_Back'][0]),
                 int(self.config['Jump_Back'][1]))
         x, y = self._ramdon_xy(x, y)
-        time.sleep(0.05)
+        time.sleep(self._random_click_duration())
         self.adb.touch_down(x, y, 2)
-        time.sleep(0.05)
+        time.sleep(self._random_click_duration())
         self.adb.touch_up(x, y, 2)
-        time.sleep(0.05)
+        time.sleep(self._random_click_duration())
         self.adb.touch_down(x, y, 2)
-        time.sleep(0.05)
+        time.sleep(self._random_click_duration())
         self.adb.touch_up(x, y, 2)
 
     def click(self, x, y, t=0.1):
+        x, y = self._ramdon_xy(x, y)
         self.reset()
-        time.sleep(0.15)
+        time.sleep(self._random_click_interval())
         self.adb.touch_down(x, y)
-        time.sleep(t)
+        time.sleep(self._random_click_duration())
         self.adb.touch_up(x, y)
 
     def reset(self):
@@ -148,6 +161,6 @@ class GameControl:
         self.attack(False)
 
     def _ramdon_xy(self, x, y):
-        x = x + random.randint(-5, 5)
-        y = y + random.randint(-5, 5)
+        x = x + random.randint(-6, 6)
+        y = y + random.randint(-6, 6)
         return x, y

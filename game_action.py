@@ -1,17 +1,18 @@
-from hero.naima import Naima
-from game_control import GameControl
+import os
 import time
+import threading
 import numpy as np
 from collections import deque
-import threading
-from utils.action_utils import calculate_center, calculate_distance, find_closest_or_second_closest_box, find_close_point_to_box, find_farthest_box, calculate_point_to_box_angle, calculate_gate_angle, calculate_angle_to_box, is_image_almost_black, calculate_point_to_box_angle, find_farthest_box, find_closest_or_second_closest_box
+from hero.naima import Naima
+from game_control import GameControl
+from utils.action_utils import calculate_center, calculate_box_center, calculate_distance, find_closest_or_second_closest_box, find_close_point_to_box, find_farthest_box, calculate_point_to_box_angle, calculate_gate_angle, calculate_angle_to_box, is_image_almost_black, calculate_point_to_box_angle, find_farthest_box
+from utils.cv2_matcher import CV2Matcher
 
 
 class GameAction:
     def __init__(self, ctrl: GameControl, queue):
         self.queue = queue
         self.ctrl = ctrl
-        self.detect_retry = False
         self.pre_state = True
         self.stop_event = True
         self.reset_event = False
@@ -22,16 +23,18 @@ class GameAction:
         self.thread = threading.Thread(target=self.control)  # 创建线程，并指定目标函数
         self.thread.daemon = True  # 设置为守护线程（可选）
         self.thread.start()
+        self.last_time = 0
 
-        self.pixel_pre_ms = None
-        self.last_hero_pos = None
-        self.last_hero_time = None
+        self.matcher = CV2Matcher(os.path.join(os.path.dirname(
+            os.path.abspath(__file__)), "./template.json"))
+
+        self.special_command = None
 
     def reset(self):
         self.thread_run = False
         time.sleep(0.1)
         self.room_num = -1
-        self.detect_retry = False
+        self.special_command = None
         self.pre_state = True
         self.thread_run = True
         self.thread = threading.Thread(target=self.control)  # 创建线程，并指定目标函数
@@ -42,7 +45,6 @@ class GameAction:
         last_room_pos = []
         hero_track = deque()
         hero_track.appendleft([0, 0])
-        last_angle = 0
 
         while self.thread_run:
             # 等待数据
@@ -63,7 +65,6 @@ class GameAction:
                     hero_track = deque()
                     hero_track.appendleft(
                         [1-last_room_pos[0], 1-last_room_pos[1]])
-                    last_angle = 0
                     self.ctrl.reset()
                     self.pre_state = True
                 else:
@@ -94,22 +95,16 @@ class GameAction:
             # 计算英雄位置
             self.calculate_hero_pos(hero_track, hero)
 
-            # 计算移速
-            if self.last_hero_time is not None:
-                distance = calculate_distance(
-                    hero_track[0], self.last_hero_pos)
-                interval = time.time() - self.last_hero_time
-                self.pixel_pre_ms = distance / interval
-                print(
-                    f"当前速度: {self.pixel_pre_ms} pixel/ms, interval: {interval}")
-            self.last_hero_time = time.time()
-            self.last_hero_pos = hero_track[0]
+            # 计算时间间隔
+            current_time = time.time()
+            interval = current_time - self.last_time
+            self.last_time = current_time
 
             # 过图逻辑
             if len(card) >= 8:
-                time.sleep(1)
+                time.sleep(1+np.random.rand())
                 self.ctrl.click(0.25*image.shape[0], 0.25*image.shape[1])
-                self.detect_retry = True
+                self.special_command = 'retry'
                 time.sleep(2.5)
             if len(monster) > 0:
                 outprint = '有怪物'
@@ -119,18 +114,19 @@ class GameAction:
                 outprint = '有材料'
                 if len(gate) > 0:
                     close_gate, distance = find_close_point_to_box(
-                        gate, hero_track[0])
+                        gate, hero_track[0])  # 找到最近的门
                     farthest_item, distance = find_farthest_box(
-                        equipment, close_gate)
+                        equipment, close_gate)  # 找到离最近门最远的材料
                     angle = calculate_point_to_box_angle(
                         hero_track[0], farthest_item)
                 else:
                     close_item, distance = find_close_point_to_box(
-                        equipment, hero_track[0])
+                        equipment, hero_track[0])  # 找到最近的材料
                     angle = calculate_point_to_box_angle(
                         hero_track[0], close_item)
                 self.ctrl.attack(False)
                 self.ctrl.move(angle)
+
             elif len(gate) > 0:
                 outprint = '有门'
                 if self.buwanjia[self.room_num] == 9:  # 左门
@@ -154,19 +150,16 @@ class GameAction:
                     hero_track[0], close_arrow)
                 self.ctrl.move(angle)
                 self.ctrl.attack(False)
-            elif self.detect_retry == True:
-                print("detect_retry")
-                time.sleep(3)
-                self.ctrl.skill("retry")
-                time.sleep(1)
-                self.ctrl.skill("ok")
-
-                self.ctrl.move(0)
-                self.detect_retry = False
-                self.room_num = 0
-                hero_track = deque()
-                hero_track.appendleft([0, 0])
-
+            elif self.special_command == 'retry':
+                if self.find_and_click(image, "retry"):
+                    self.special_command = 'ok'
+            elif self.special_command == 'ok':
+                if self.find_and_click(image, "ok"):
+                    self.ctrl.move(0)
+                    self.room_num = -1
+                    hero_track = deque()
+                    hero_track.appendleft([0, 0])
+                    self.special_command = None
             else:
                 outprint = "无目标"
                 if self.room_num == 4:
@@ -175,7 +168,22 @@ class GameAction:
                     angle = calculate_angle_to_box(hero_track[0], [0.5, 0.75])
                 self.ctrl.move(angle)
                 self.ctrl.attack(False)
-            print(f"\r当前进度:{outprint},角度{angle}，位置{hero_track[0]}", end="")
+            print(
+                f"\r当前进度:{outprint},角度{angle}，位置{hero_track[0]}, 耗时{interval},特殊命令:{self.special_command}", end="")
+
+    def find_and_click(self, image, target):
+        for _ in range(2):
+            target_box = self.matcher.match(image, target)
+            if target_box is not None:
+                break
+            time.sleep(0.1)
+        if target_box is None:
+            return False
+        target_point = calculate_box_center(target_box)
+        print(f"click '{target}'")
+        self.ctrl.click(target_point[0]+np.random.randint(-6, 6),
+                        target_point[1]+np.random.randint(-6, 6))
+        return True
 
     def calculate_hero_pos(self, hero_track, boxs):
         if len(boxs) == 0:
