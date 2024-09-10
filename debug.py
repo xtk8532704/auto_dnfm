@@ -1,7 +1,7 @@
 import pdb
 import time
 from main import *
-from utils.action_utils import calculate_distance, calculate_angle_to_box
+from utils.action_utils import calculate_distance, calculate_angle
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 image_queue = AutoCleaningQueue(maxsize=3)
@@ -12,7 +12,7 @@ ctrl = GameControl(client, os.path.join(
 
 def move_to(cur_pos, target_pos, distance_pre_second=0.4):
     distance = calculate_distance(cur_pos, target_pos)
-    angle = calculate_angle_to_box(cur_pos, target_pos)
+    angle = calculate_angle(cur_pos, target_pos)
     ctrl.move(angle)
     time.sleep(distance/distance_pre_second)
     ctrl.reset()

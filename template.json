@@ -1,4 +1,8 @@
 {
+
+    "repair":"repair.png",
+    "repair_ok":"repair_ok.png",
+    "repair_cancel":"repair_cancel.png",
     "retry":"retry.png",
     "ok":"ok.png",
     "cancel":"cancel.png"

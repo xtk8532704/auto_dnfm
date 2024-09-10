@@ -5,6 +5,7 @@ from scrcpy_adb import ScrcpyADB
 import math
 import random
 import numpy as np
+from utils.action_utils import calculate_distance, calculate_angle
 
 
 class GameControl:
@@ -26,15 +27,15 @@ class GameControl:
             value = np.random.normal(mean, std_dev)
             return max(min(value, upper), lower)
         self._random_click_duration = lambda: _bounded_normal(
-            mean=0.04, std_dev=0.01, lower=0.03, upper=0.6)
+            mean=0.07, std_dev=0.01, lower=0.05, upper=0.2)
 
         self._random_click_interval = lambda: _bounded_normal(
-            mean=0.06, std_dev=0.02, lower=0.4, upper=0.8)
+            mean=0.09, std_dev=0.02, lower=0.06, upper=0.2)
 
     def calc_mov_point(self, angle: int) -> Tuple[int, int]:
         rx, ry = (int(self.config['joystick']['center'][0]), int(
             self.config['joystick']['center'][1]))
-        angle += np.random.randint(-5, 5)
+        # angle += np.random.randint(-5, 5) 不需要，角度本来就不准，这里加了一直抖
         if angle == 0:
             return rx, ry
         angle = angle % 360
@@ -148,19 +149,19 @@ class GameControl:
         time.sleep(self._random_click_duration())
         self.adb.touch_up(x, y, 2)
 
-    def click(self, x, y, t=0.1):
-        x, y = self._ramdon_xy(x, y)
+    def click(self, x, y, r=6):
+        x_r, y_r = self._ramdon_xy(x, y, r)
         self.reset()
         time.sleep(self._random_click_interval())
-        self.adb.touch_down(x, y)
-        time.sleep(self._random_click_duration())
-        self.adb.touch_up(x, y)
+        self.adb.touch_down(x_r, y_r)
+        time.sleep(self._random_click_duration()+0.2)
+        self.adb.touch_up(x_r, y_r)
 
     def reset(self):
         self.move(0)
         self.attack(False)
 
-    def _ramdon_xy(self, x, y):
-        x = x + random.randint(-6, 6)
-        y = y + random.randint(-6, 6)
+    def _ramdon_xy(self, x, y, r=6):
+        x = x + random.randint(-r, r)
+        y = y + random.randint(-r, r)
         return x, y

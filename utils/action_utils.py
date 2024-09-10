@@ -7,7 +7,7 @@ def calculate_box_center(box):  # 计算矩形框的中心点坐标
     return ((box[0] + box[2]) / 2, (box[1] + box[3]) / 2)
 
 
-def calculate_center(box):  # 计算矩形框的底边中心点坐标
+def calculate_bottom_center(box):  # 计算矩形框的底边中心点坐标
     return ((box[0] + box[2]) / 2, box[3])
 
 
@@ -15,12 +15,20 @@ def calculate_distance(center1, center2):  # 计算两个底边中心点之间�
     return math.sqrt((center1[0] - center2[0]) ** 2 + (center1[1] - center2[1]) ** 2)
 
 
-def find_closest_box(boxes, target_box):  # 计算目标框的中心点
-    target_center = calculate_center(target_box)  # 初始化最小距离和最近的box
+def calculate_angle(point1, point2):  # 计算点到点的角度
+    # 计算从点 (x, y) 到中心点的角度
+    angle = math.atan2(point2[1] - point1[1], point2[0] - point1[0])
+    angle_degrees = math.degrees(angle)  # 将角度转换为度数
+    adjusted_angle = - angle_degrees
+    return adjusted_angle
+
+
+def find_closest_box_to_box(boxes, target_box):  # 计算目标框的中心点
+    target_center = calculate_bottom_center(target_box)  # 初始化最小距离和最近的box
     min_distance = float('inf')
     closest_box = None  # 遍历所有box，找出最近的box
     for box in boxes:
-        center = calculate_center(box)
+        center = calculate_bottom_center(box)
         distance = calculate_distance(center, target_center)
         if distance < min_distance:
             min_distance = distance
@@ -28,12 +36,12 @@ def find_closest_box(boxes, target_box):  # 计算目标框的中心点
     return closest_box, min_distance
 
 
-def find_farthest_box(boxes, target_box):
-    target_center = calculate_center(target_box)  # 计算目标框的中心点
+def find_farthest_box_to_box(boxes, target_box):
+    target_center = calculate_bottom_center(target_box)  # 计算目标框的中心点
     max_distance = -float('inf')  # 初始化最大距离和最远的box
     farthest_box = None
     for box in boxes:  # 遍历所有box，找出最远的box
-        center = calculate_center(box)
+        center = calculate_bottom_center(box)
         distance = calculate_distance(center, target_center)
         if distance > max_distance:
             max_distance = distance
@@ -41,7 +49,7 @@ def find_farthest_box(boxes, target_box):
     return farthest_box, max_distance
 
 
-def find_closest_or_second_closest_box(boxes, point):
+def find_closest_or_second_closest_box_to_point(boxes, point):
     """找到离目标框最近的框或第二近的框"""
     if len(boxes) < 2:
         # 如果框的数量少于两个，直接返回最近的框
@@ -49,7 +57,7 @@ def find_closest_or_second_closest_box(boxes, point):
         closest_box = None
         min_distance = float('inf')
         for box in boxes:
-            center = calculate_center(box)
+            center = calculate_bottom_center(box)
             distance = calculate_distance(center, target_center)
             if distance < min_distance:
                 min_distance = distance
@@ -64,7 +72,7 @@ def find_closest_or_second_closest_box(boxes, point):
     min_distance_2 = float('inf')
     closest_box_2 = None
     for box in boxes:
-        center = calculate_center(box)
+        center = calculate_bottom_center(box)
         distance = calculate_distance(center, target_center)
         if distance < min_distance_1:
             # 更新第二近的框
@@ -81,12 +89,12 @@ def find_closest_or_second_closest_box(boxes, point):
     return closest_box_2, min_distance_2
 
 
-def find_close_point_to_box(boxes, point):  # 找距离点最近的框
+def find_close_box_to_point(boxes, point):  # 找距离点最近的框
     target_center = point  # 初始化最小距离和最近的box
     min_distance = float('inf')
     closest_box = None  # 遍历所有box，找出最近的box
     for box in boxes:
-        center = calculate_center(box)
+        center = calculate_bottom_center(box)
         distance = calculate_distance(center, target_center)
         if distance < min_distance:
             min_distance = distance
@@ -96,42 +104,15 @@ def find_close_point_to_box(boxes, point):  # 找距离点最近的框
 
 def calculate_point_to_box_angle(point, box):  # 计算点到框的角度
     center1 = point
-    center2 = calculate_center(box)
-    delta_x = center2[0] - center1[0]  # 计算相对角度（以水平轴为基准）
-    delta_y = center2[1] - center1[1]
-    angle = math.atan2(delta_y, delta_x)
-    angle_degrees = math.degrees(angle)  # 将角度转换为度数
-    adjusted_angle = - angle_degrees
+    center2 = calculate_bottom_center(box)
+    adjusted_angle = calculate_angle(center1, center2)
     return adjusted_angle
 
 
-def calculate_angle(box1, box2):
-    center1 = calculate_center(box1)
-    center2 = calculate_center(box2)
-    delta_x = center2[0] - center1[0]  # 计算相对角度（以水平轴为基准）
-    delta_y = center2[1] - center1[1]
-    angle = math.atan2(delta_y, delta_x)
-    angle_degrees = math.degrees(angle)  # 将角度转换为度数
-    adjusted_angle = - angle_degrees
-    return adjusted_angle
-
-
-def calculate_gate_angle(point, gate):
+def calculate_point_to_gate_angle(point, gate):
     center1 = point
     center2 = ((gate[0]+gate[2])/2, (gate[3]-gate[1])*0.65+gate[1])
-    delta_x = center2[0] - center1[0]  # 计算相对角度（以水平轴为基准）
-    delta_y = center2[1] - center1[1]
-    angle = math.atan2(delta_y, delta_x)
-    angle_degrees = math.degrees(angle)  # 将角度转换为度数
-    adjusted_angle = - angle_degrees
-    return adjusted_angle
-
-
-def calculate_angle_to_box(point1, point2):  # 计算点到点的角度
-    # 计算从点 (x, y) 到中心点的角度
-    angle = math.atan2(point2[1] - point1[1], point2[0] - point1[0])
-    angle_degrees = math.degrees(angle)  # 将角度转换为度数
-    adjusted_angle = - angle_degrees
+    adjusted_angle = calculate_angle(center1, center2)
     return adjusted_angle
 
 
@@ -152,7 +133,7 @@ def calculate_iou(box1, box2):
     return inter_area / union_area if union_area > 0 else 0
 
 
-def normalize_angle(angle):  # 将角度规范化到 [-180, 180) 的范围内
+def normalize_angle(angle):  # 将角度规范化到 [-180, 180)
     angle = angle % 360
     if angle >= 180:
         angle -= 360
@@ -160,9 +141,12 @@ def normalize_angle(angle):  # 将角度规范化到 [-180, 180) 的范围内
 
 
 def are_angles_on_same_side_of_y(angle1, angle2):  # 规范化角度
+
     norm_angle1 = normalize_angle(angle1)
     norm_angle2 = normalize_angle(angle2)  # 检查是否在 y 轴的同侧
-    return (norm_angle1 >= 0 and norm_angle2 >= 0) or (norm_angle1 < 0 and norm_angle2 < 0)
+    is_a1_positive = norm_angle1 >= -90 and norm_angle1 <= 90
+    is_a2_positive = norm_angle2 >= -90 and norm_angle2 <= 90
+    return is_a1_positive == is_a2_positive
 
 
 def is_image_almost_black(image, threshold=30):  # 读取图片
