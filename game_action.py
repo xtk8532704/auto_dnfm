@@ -13,7 +13,6 @@ class GameAction:
     def __init__(self, ctrl: GameControl, queue):
         self.queue = queue
         self.ctrl = ctrl
-        self.pre_state = True
         self.stop_event = True
         self.reset_event = False
         self.control_attack = Naima(ctrl)
@@ -28,7 +27,8 @@ class GameAction:
         self.matcher = CV2Matcher(os.path.join(os.path.dirname(
             os.path.abspath(__file__)), "./template.json"))
 
-        self.special_command = None  # 'finish'  # debug
+        self.last_door_time = 0
+        self.special_command = 'update_room'
         self.use_diamond = False  # 用黑砖来判断hero的位置
         self.diamond_to_hero_offset = None  # 黑砖到hero的偏移
         self.last_closest_door = None  # 上一帧最近的门以防止走错
@@ -37,14 +37,20 @@ class GameAction:
         self.thread_run = False
         time.sleep(0.1)
         self.room_num = -1
-        self.special_command = None
-        self.pre_state = True
+        self.last_door_time = 0
+        self.special_command = 'update_room'
         self.thread_run = True
         self.thread = threading.Thread(target=self.control)  # 创建线程，并指定目标函数
         self.thread.daemon = True  # 设置为守护线程（可选）
         self.thread.start()
 
     def control(self):
+        self.buwanjia_control()
+
+    def street_control(self, image, boxs):
+        pass
+
+    def buwanjia_control(self):
         last_room_pos = []
         hero_track = deque()
         hero_track.appendleft([0, 0])
@@ -62,14 +68,16 @@ class GameAction:
             # 等待过图黑屏
             image, boxs = self.queue.get()
             if is_image_almost_black(image):
-                if self.pre_state == False:
+                this_door_time = time.time()
+                if this_door_time-self.last_door_time > 1.5:
                     print("过图")
                     last_room_pos = hero_track[0]
                     hero_track = deque()
                     hero_track.appendleft(
                         [1-last_room_pos[0], 1-last_room_pos[1]])
                     self.ctrl.reset()
-                    self.pre_state = True
+                    self.last_door_time = this_door_time
+                    self.special_command = 'update_room'
                 else:
                     continue
 
@@ -87,10 +95,10 @@ class GameAction:
             # 更新房间，目标门
             angle = 0
             outprint = ''
-            if self.pre_state == True:
+            if self.special_command == 'update_room':
                 if len(hero) > 0:  # 记录房间号
                     self.room_num += 1
-                    self.pre_state = False
+                    self.special_command = None
                     print("房间号：", self.room_num)
                     print("目标", self.buwanjia[self.room_num])
                 else:
@@ -122,12 +130,10 @@ class GameAction:
                 self.ctrl.click(0.25*image.shape[0], 0.25*image.shape[1])
                 self.special_command = 'finish'
                 time.sleep(2.)
-
-            if len(monster) > 0:
+            elif len(monster) > 0:
                 outprint = '有怪物'
                 angle = self.control_attack.control(
                     hero_track[0], image, boxs, self.room_num)
-
             elif len(equipment) > 0:
                 outprint = '有材料'
                 if len(gate) > 0:
@@ -145,11 +151,8 @@ class GameAction:
                 self.ctrl.attack(False)
                 self.ctrl.move(angle)
 
-            elif len(gate) > 0:  # TODO 检测被连续击倒往中间后跳
+            elif len(gate) > 0:
                 outprint = '有门'
-                # TODO 找门逻辑改为分上下左右门处理，如果不在自己那一边，则到中心再开始往门跑。
-                # 并且过图黑屏的时候确认上一帧进的是哪个门以更新room_num
-                # 找门持续2s没到门就往中间走到0.5，0.25左右重找，这个持续时间的逻辑可用于检测其他卡死
 
                 close_gate, distance = find_close_box_to_point(
                     gate, hero_track[0])
@@ -174,18 +177,18 @@ class GameAction:
                 self.ctrl.move(angle)
 
             elif self.special_command == 'finish':
-                if self.find_and_click(image, "repair", check_it_disappear=False):
+                if self.find_and_click(image, "repair", check_until_disappear=False):
                     self.special_command = 'repair_ok'
                     time.sleep(1.+np.random.normal(0, 0.3))
-                elif self.find_and_click(image, "retry", check_it_disappear=False):
+                elif self.find_and_click(image, "retry", check_until_disappear=False):
                     self.special_command = 'retry_ok'
                     time.sleep(1.5+np.random.normal(0, 0.3))
 
             elif self.special_command == 'repair_ok':
                 self.find_and_click(image, "repair_ok")
-                self.special_command = 'retry_cancel'
-            elif self.special_command == 'retry_cancel':
-                self.find_and_click(image, "retry_cancel")
+                self.special_command = 'repair_cancel'
+            elif self.special_command == 'repair_cancel':
+                self.find_and_click(image, "repair_cancel")
                 self.special_command = 'finish'
             elif self.special_command == 'retry_ok':
                 self.find_and_click(image, "ok")
@@ -207,7 +210,7 @@ class GameAction:
             print(
                 f"\r当前进度:{outprint},角度{angle}，位置{hero_track[0]}, 耗时{interval},特定命令:{self.special_command}", end="")
 
-    def find_and_click(self, image, target, random_r=6, check_it_disappear=True):
+    def find(self, image, target):
         # 找2次
         for _ in range(2):
             target_box = self.matcher.match(image, target)
@@ -215,11 +218,16 @@ class GameAction:
                 break
             time.sleep(0.2)
         if target_box is None:
+            return None
+        return calculate_box_center(target_box)
+
+    def find_and_click(self, image, target, random_r=6, check_until_disappear=True):
+        target_point = self.find(image, target)
+        if target_point is None:
             return False
-        target_point = calculate_box_center(target_box)
         self.ctrl.click(target_point[0], target_point[1], random_r)
 
-        if not check_it_disappear:
+        if not check_until_disappear:
             return True
         # 确认消失
         for _ in range(4):

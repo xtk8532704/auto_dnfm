@@ -16,13 +16,20 @@ class Naima:
         with open(file_path, 'r', encoding='utf-8') as file:
             self.dict = json.load(file)  # 解析 JSON 文件
 
-    def skill(self, name, wait_time=0):
+        self.close_skills = ["光芒烬盾", "洁净之光", "胜利之矛"]
+        self.middle_skills = ["沐天之光", "光明锁环", "领悟之雷"]
+
+    def skill(self, name, wait_time=0, ignore_cd=False):
+        if not ignore_cd and "last_used" in self.dict[name] and self.dict[name]["last_used"] > time.time()-self.dict[name]["cd"]:
+            return False
+        self.dict[name]["last_used"] = time.time()
         self.ctrl.skill(self.dict[name]["pos"])
         time.sleep(np.random.uniform(0, 0.15))
         self.ctrl.move(0)  # 如果点不动技能也要保证停止身位
         if wait_time != 0:
             time.sleep(wait_time)
         print("shifang:" + name)
+        return True
 
     def control(self, hero_pos, image, boxs, MapNumber):
 
@@ -58,10 +65,10 @@ class Naima:
             elif MapNumber == 5:
                 time.sleep(wait)
                 self.move_and_stop(180, 0.4)
-                self.skill("觉醒", 0.4)
-                self.skill("觉醒", 0.4)
-                self.skill("觉醒", 0.4)
-                self.skill("觉醒", 2.5)
+                self.skill("觉醒", 0.4, True)
+                self.skill("觉醒", 0.4, True)
+                self.skill("觉醒", 0.4, True)
+                self.skill("觉醒", 2.5, True)
             elif MapNumber == 6:
                 None
             elif MapNumber == 7:
@@ -95,41 +102,28 @@ class Naima:
         if not are_angles_on_same_side_of_y(self.last_angle, angle):
             self.move_a_little(angle)
             return self.last_angle
-        # self.move_a_little(angle)
 
         # 范围内自由技能
         distance_x = abs(hero_pos[0]-close_monster_point[0])
         distance_y = abs(hero_pos[1]-close_monster_point[1])
         if distance_y < 0.15 and distance_x < 0.5:
-            if distance_x < 0.1 and np.random.rand() < 0.5:
-                self.ctrl.attack(True)
-                time.sleep(1.5)
-            elif distance_x < 0.25:
-                self.random_close_skills()
+            if distance_x < 0.25:
+                skilled = self.random_skill(self.close_skills)
             elif distance_x < 0.5:
-                self.random_middle_skills()
+                skilled = self.random_skill(self.middle_skills)
+            if not skilled:
+                self.ctrl.attack(True)
         else:
             # 远距离怪物:非阻塞位移至怪物靠角色这一侧偏移0.1
             self.move_to_monster(hero_pos, close_monster_point)
         return self.last_angle
 
-    def random_close_skills(self):
-        random_skill = np.random.rand()
-        if random_skill < 0.4:
-            self.skill("光芒烬盾", 0.9)
-        elif random_skill < 0.7:
-            self.skill("洁净之光", 0.9)
-        else:
-            self.skill("胜利之矛", 0.9)
-
-    def random_middle_skills(self):
-        random_skill = np.random.rand()
-        if random_skill < 0.5:
-            self.skill("沐天之光", 0.9)
-        elif random_skill < 0.8:
-            self.skill("光明锁环", 1.2)
-        else:
-            self.skill("领悟之雷", 2)
+    def random_skill(self, skill_list):
+        np.random.shuffle(skill_list)
+        for skill in skill_list:
+            if self.skill(skill):
+                return True
+        return False
 
     def move_a_little(self, angle):
         self.ctrl.move(angle)
