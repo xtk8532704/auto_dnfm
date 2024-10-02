@@ -69,7 +69,7 @@ class GameAction:
             image, boxs = self.queue.get()
             if is_image_almost_black(image):
                 this_door_time = time.time()
-                if this_door_time-self.last_door_time > 1.5:
+                if this_door_time-self.last_door_time > 1.2:
                     print("过图")
                     last_room_pos = hero_track[0]
                     hero_track = deque()
@@ -221,7 +221,7 @@ class GameAction:
             return None
         return calculate_box_center(target_box)
 
-    def find_and_click(self, image, target, random_r=6, check_until_disappear=True):
+    def find_and_click(self, image, target, random_r=4, check_until_disappear=True):
         target_point = self.find(image, target)
         if target_point is None:
             return False
@@ -231,7 +231,7 @@ class GameAction:
             return True
         # 确认消失
         for _ in range(4):
-            time.sleep(0.8)
+            time.sleep(0.5)
             target_box = self.matcher.match(image, target)
             if target_box is None:
                 return True
