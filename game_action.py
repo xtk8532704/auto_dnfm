@@ -17,27 +17,42 @@ class GameAction:
         self.reset_event = False
         self.control_attack = Naima(ctrl)
         self.room_num = -1
-        self.buwanjia = [8, 10, 10, 11, 9, 10, 10, 10, 10, 10, 10, 10, 10, 10]
-        self.thread_run = True
-        self.thread = threading.Thread(target=self.control)  # 创建线程，并指定目标函数
-        self.thread.daemon = True  # 设置为守护线程（可选）
-        self.thread.start()
-        self.last_time = 0
+        self.buwanjia = [8, 10, 10, 11, 9, ] + [10] * 20
 
         self.matcher = CV2Matcher(os.path.join(os.path.dirname(
             os.path.abspath(__file__)), "./template.json"))
 
-        self.last_door_time = 0
         self.special_command = 'update_room'
         self.use_diamond = False  # 用黑砖来判断hero的位置
         self.diamond_to_hero_offset = None  # 黑砖到hero的偏移
         self.last_closest_door = None  # 上一帧最近的门以防止走错
+        self.timers = {
+            'each_time': 0,
+            'refresh_time': 0,
+            'door_time': 0,
+        }
+
+        self.thread_run = True
+        self.thread = threading.Thread(target=self.control)  # 创建线程，并指定目标函数
+        self.thread.daemon = True  # 设置为守护线程（可选）
+        self.thread.start()
+
+    def reset_timers(self):
+        for name in self.timers:
+            self.timers[name] = 0
+
+    def get_time(self, name):
+        return time.time() - self.timers[name]
+
+    def update_time(self, name):
+        self.timers[name] = time.time()
 
     def reset(self):
         self.thread_run = False
         time.sleep(0.1)
         self.room_num = -1
-        self.last_door_time = 0
+
+        self.reset_timers()
         self.special_command = 'update_room'
         self.thread_run = True
         self.thread = threading.Thread(target=self.control)  # 创建线程，并指定目标函数
@@ -56,6 +71,10 @@ class GameAction:
         hero_track.appendleft([0, 0])
 
         while self.thread_run:
+            # 10s 防卡死
+            if self.get_time('refresh_time') > 10:
+                self.ctrl.reset()
+                self.update_time('refresh_time')
             # 等待数据
             if self.stop_event:
                 time.sleep(0.001)
@@ -68,15 +87,14 @@ class GameAction:
             # 等待过图黑屏
             image, boxs = self.queue.get()
             if is_image_almost_black(image):
-                this_door_time = time.time()
-                if this_door_time-self.last_door_time > 1.2:
+                if self.get_time('door_time') > 1.2:
                     print("过图")
                     last_room_pos = hero_track[0]
                     hero_track = deque()
                     hero_track.appendleft(
                         [1-last_room_pos[0], 1-last_room_pos[1]])
                     self.ctrl.reset()
-                    self.last_door_time = this_door_time
+                    self.update_time('door_time')
                     self.special_command = 'update_room'
                 else:
                     continue
@@ -119,11 +137,6 @@ class GameAction:
                         break
             monster = np.delete(monster, delete_index, axis=0)
 
-            # 计算时间间隔
-            current_time = time.time()
-            interval = current_time - self.last_time
-            self.last_time = current_time
-
             # 过图逻辑
             if len(card) >= 8:
                 time.sleep(1+np.random.rand())
@@ -151,12 +164,11 @@ class GameAction:
                 self.ctrl.attack(False)
                 self.ctrl.move(angle)
 
-            elif len(gate) > 0:
+            elif len(gate) > 0 and not (self.room_num == 6 and len(arrow) > 3):
                 outprint = '有门'
-
                 close_gate, distance = find_close_box_to_point(
                     gate, hero_track[0])
-                if self.buwanjia[self.room_num] == 9 and distance < 0.4:
+                if self.room_num == 4 and distance < 0.4:
                     angle = calculate_point_to_gate_angle(  # 左门位置偏高
                         hero_track[0], close_gate)
                     self.ctrl.attack(False)
@@ -188,7 +200,8 @@ class GameAction:
                 self.find_and_click(image, "repair_ok")
                 self.special_command = 'repair_cancel'
             elif self.special_command == 'repair_cancel':
-                self.find_and_click(image, "repair_cancel")
+                self.find_and_click(image, "repair_cancel",
+                                    check_until_disappear=False)
                 self.special_command = 'finish'
             elif self.special_command == 'retry_ok':
                 self.find_and_click(image, "ok")
@@ -207,6 +220,9 @@ class GameAction:
                         hero_track[0], [0.5, 0.75])
                 self.ctrl.move(angle)
                 self.ctrl.attack(False)
+
+            interval = self.get_time('each_time')
+            self.update_time('each_time')
             print(
                 f"\r当前进度:{outprint},角度{angle}，位置{hero_track[0]}, 耗时{interval},特定命令:{self.special_command}", end="")
 
